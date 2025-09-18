@@ -206,7 +206,7 @@ export const schemaMetadata = ${JSON.stringify({
 }, null, 2)};
 
 // Validation helper
-export function validateEvent(eventName: string, properties: any) {
+export function validateEvent(eventName: string, properties: unknown) {
   const schema = eventSchemas[eventName as keyof typeof eventSchemas];
   if (!schema) {
     throw new Error('Unknown event: ' + eventName);

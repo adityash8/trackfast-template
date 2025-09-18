@@ -1,13 +1,12 @@
 import posthog from 'posthog-js';
-import { v4 as uuidv4 } from 'uuid';
 
 // Initialize PostHog on client-side only
 if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
   posthog.init(process.env.NEXT_PUBLIC_POSTHOG_KEY, {
     api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
     person_profiles: 'identified_only',
-    loaded: (posthog) => {
-      if (process.env.NODE_ENV === 'development') console.log('PostHog loaded');
+    loaded: (ph) => {
+      if (process.env.NODE_ENV === 'development') console.log('PostHog loaded', ph);
     },
   });
 }
@@ -15,14 +14,14 @@ if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_POSTHOG_KEY) {
 // Analytics interface for server-side and client-side tracking
 export interface TrackingEvent {
   event: string;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
   timestamp?: Date;
   userId?: string;
   sessionId?: string;
 }
 
 // Core tracking function with fallback to server-side proxy
-export const track = async (event: string, properties?: Record<string, any>) => {
+export const track = async (event: string, properties?: Record<string, unknown>) => {
   const payload: TrackingEvent = {
     event,
     properties: {
@@ -53,7 +52,7 @@ export const track = async (event: string, properties?: Record<string, any>) => 
     return { success: true, method: 'server' };
   } catch (error) {
     console.error('Analytics tracking failed:', error);
-    return { success: false, error: error.message };
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 };
 
@@ -64,7 +63,7 @@ export const pageview = (path?: string) => {
 };
 
 // User identification
-export const identify = (userId: string, traits?: Record<string, any>) => {
+export const identify = (userId: string, traits?: Record<string, unknown>) => {
   if (typeof window !== 'undefined' && posthog) {
     posthog.identify(userId, traits);
   }

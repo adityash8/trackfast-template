@@ -114,7 +114,7 @@ class TrackfastDoctor {
       this.addResult(
         'API Health',
         'fail',
-        `❌ Failed to connect to API: ${error.message}`
+        `❌ Failed to connect to API: ${error instanceof Error ? error.message : String(error)}`
       );
       return false;
     }
@@ -201,7 +201,7 @@ class TrackfastDoctor {
         this.addResult(
           `Schema: ${testCase.name}`,
           'fail',
-          `❌ ${testCase.name} threw error: ${error.message}`
+          `❌ ${testCase.name} threw error: ${error instanceof Error ? error.message : String(error)}`
         );
         validationPassed = false;
       }
@@ -246,7 +246,7 @@ class TrackfastDoctor {
         this.addResult(
           'Browser: Page Load',
           'fail',
-          `❌ Failed to load application: ${error.message}`
+          `❌ Failed to load application: ${error instanceof Error ? error.message : String(error)}`
         );
         return false;
       }
@@ -268,7 +268,7 @@ class TrackfastDoctor {
       });
 
       // Wait for requests to complete
-      await page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       if (requests.length > 0) {
         this.addResult(
@@ -291,7 +291,7 @@ class TrackfastDoctor {
       this.addResult(
         'Browser: General',
         'fail',
-        `❌ Browser testing failed: ${error.message}`
+        `❌ Browser testing failed: ${error instanceof Error ? error.message : String(error)}`
       );
       return false;
     } finally {
@@ -359,7 +359,7 @@ class TrackfastDoctor {
         this.addResult(
           `Event: ${testEvent.name}`,
           'fail',
-          `❌ ${testEvent.description} threw error: ${error.message}`
+          `❌ ${testEvent.description} threw error: ${error instanceof Error ? error.message : String(error)}`
         );
         flowPassed = false;
       }
@@ -431,7 +431,7 @@ class TrackfastDoctor {
       return criticalFailures === 0;
 
     } catch (error) {
-      this.log(`\n💥 Doctor run failed: ${error.message}`, 'error');
+      this.log(`\n💥 Doctor run failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
       return false;
     }
   }

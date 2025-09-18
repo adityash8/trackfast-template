@@ -24,7 +24,7 @@ export default function Home() {
       await analytics.featureUsed('test-button', 'homepage');
 
       setTrackingStatus('Test event tracked ✅');
-    } catch (error) {
+    } catch {
       setTrackingStatus('Test event failed ❌');
     }
   };
