@@ -1,0 +1,126 @@
+version: "1.0"
+project:
+  name: "trackfast"
+  description: "Schema-safe analytics boilerplate"
+
+events:
+  # Authentication events
+  user_signed_up:
+    description: "User completed registration"
+    properties:
+      email:
+        type: string
+        required: true
+        description: "User email address"
+      plan:
+        type: enum
+        enum: ["free", "starter", "growth"]
+        required: true
+        description: "Selected subscription plan"
+      source:
+        type: string
+        required: false
+        description: "Registration source (organic, referral, etc.)"
+    guards:
+      - email_valid: "email must be valid format"
+      - plan_exists: "plan must be one of allowed values"
+
+  user_signed_in:
+    description: "User logged in"
+    properties:
+      email:
+        type: string
+        required: true
+      method:
+        type: enum
+        enum: ["password", "google", "github"]
+        required: true
+
+  # Product events
+  pageview:
+    description: "Page view tracking"
+    properties:
+      path:
+        type: string
+        required: true
+        description: "Page path"
+      referrer:
+        type: string
+        required: false
+        description: "Referrer URL"
+
+  feature_used:
+    description: "Feature interaction tracking"
+    properties:
+      feature:
+        type: string
+        required: true
+        description: "Feature name"
+      location:
+        type: string
+        required: false
+        description: "Where in app feature was used"
+
+  # Business events
+  subscription_created:
+    description: "New subscription created"
+    properties:
+      plan:
+        type: enum
+        enum: ["starter", "growth", "agency"]
+        required: true
+      amount:
+        type: number
+        required: true
+        description: "Subscription amount in cents"
+      currency:
+        type: string
+        required: true
+        default: "USD"
+    guards:
+      - amount_positive: "amount must be greater than 0"
+      - currency_valid: "currency must be 3-letter ISO code"
+
+  payment_completed:
+    description: "Payment successfully processed"
+    properties:
+      amount:
+        type: number
+        required: true
+      currency:
+        type: string
+        required: true
+        default: "USD"
+      plan:
+        type: string
+        required: false
+    guards:
+      - amount_positive: "amount must be greater than 0"
+
+# Analytics configuration
+analytics:
+  providers:
+    posthog:
+      enabled: true
+      capture_pageviews: true
+      capture_autocapture: false
+    ga4:
+      enabled: true
+      capture_pageviews: true
+    plausible:
+      enabled: false
+      domain: ""
+
+# Dashboard configuration
+dashboards:
+  activation:
+    events: ["user_signed_up", "feature_used"]
+    timeframe: "30d"
+  retention:
+    events: ["user_signed_in"]
+    cohort_by: "user_signed_up"
+    timeframe: "90d"
+  revenue:
+    events: ["payment_completed", "subscription_created"]
+    group_by: "plan"
+    timeframe: "30d"

@@ -1,0 +1,252 @@
+#!/usr/bin/env tsx
+import { readFileSync, writeFileSync } from 'fs';
+import { load } from 'js-yaml';
+import path from 'path';
+
+interface PropertyDef {
+  type: string;
+  required: boolean;
+  description?: string;
+  enum?: string[];
+  default?: any;
+}
+
+interface EventDef {
+  description: string;
+  properties: Record<string, PropertyDef>;
+  guards?: string[];
+}
+
+interface Schema {
+  version: string;
+  project: {
+    name: string;
+    description: string;
+  };
+  events: Record<string, EventDef>;
+  analytics?: {
+    providers: Record<string, any>;
+  };
+  dashboards?: Record<string, any>;
+}
+
+function generateZodType(prop: PropertyDef): string {
+  let zodType: string;
+
+  switch (prop.type) {
+    case 'string':
+      zodType = 'z.string()';
+      break;
+    case 'number':
+      zodType = 'z.number()';
+      break;
+    case 'boolean':
+      zodType = 'z.boolean()';
+      break;
+    case 'enum':
+      if (!prop.enum) throw new Error('Enum type must have enum values');
+      const enumValues = prop.enum.map(v => `"${v}"`).join(', ');
+      zodType = `z.enum([${enumValues}])`;
+      break;
+    case 'uuid':
+      zodType = 'z.string().uuid()';
+      break;
+    case 'email':
+      zodType = 'z.string().email()';
+      break;
+    case 'url':
+      zodType = 'z.string().url()';
+      break;
+    default:
+      zodType = 'z.any()';
+  }
+
+  // Add validation based on property name patterns
+  if (prop.type === 'string') {
+    if (prop.description?.toLowerCase().includes('email')) {
+      zodType = 'z.string().email()';
+    } else if (prop.description?.toLowerCase().includes('url')) {
+      zodType = 'z.string().url()';
+    }
+  }
+
+  // Add guards for numbers
+  if (prop.type === 'number') {
+    // Common business logic guards
+    if (prop.description?.toLowerCase().includes('amount') ||
+        prop.description?.toLowerCase().includes('price')) {
+      zodType += '.positive()';
+    }
+  }
+
+  // Handle optional fields
+  if (!prop.required) {
+    zodType += '.optional()';
+  }
+
+  // Add default values
+  if (prop.default !== undefined) {
+    zodType += `.default(${JSON.stringify(prop.default)})`;
+  }
+
+  return zodType;
+}
+
+function generateEventSchema(eventName: string, eventDef: EventDef): string {
+  const properties = Object.entries(eventDef.properties)
+    .map(([propName, propDef]) => {
+      const zodType = generateZodType(propDef);
+      return `    ${propName}: ${zodType}`;
+    })
+    .join(',\n');
+
+  return `  ${eventName}: z.object({\n${properties}\n  })`;
+}
+
+function generateTypeHelpers(schema: Schema): string {
+  const eventTypes = Object.keys(schema.events)
+    .map(eventName => `  | '${eventName}'`)
+    .join('\n');
+
+  const eventPropsTypes = Object.entries(schema.events)
+    .map(([eventName, eventDef]) => {
+      const propsType = Object.entries(eventDef.properties)
+        .map(([propName, propDef]) => {
+          let tsType: string;
+
+          switch (propDef.type) {
+            case 'string':
+            case 'email':
+            case 'url':
+            case 'uuid':
+              tsType = 'string';
+              break;
+            case 'number':
+              tsType = 'number';
+              break;
+            case 'boolean':
+              tsType = 'boolean';
+              break;
+            case 'enum':
+              if (!propDef.enum) throw new Error('Enum must have values');
+              tsType = propDef.enum.map(v => `'${v}'`).join(' | ');
+              break;
+            default:
+              tsType = 'any';
+          }
+
+          const optional = propDef.required ? '' : '?';
+          return `    ${propName}${optional}: ${tsType};`;
+        })
+        .join('\n');
+
+      return `  '${eventName}': {\n${propsType}\n  };`;
+    })
+    .join('\n');
+
+  return `
+// Generated event types
+export type EventName =
+${eventTypes};
+
+export type EventProperties = {
+${eventPropsTypes}
+};
+
+// Type-safe tracking function
+export function trackEvent<T extends EventName>(
+  event: T,
+  properties: EventProperties[T]
+): Promise<{ success: boolean; method?: string; error?: string }> {
+  // Validate at runtime using Zod schemas
+  const schema = eventSchemas[event];
+  const result = schema.safeParse(properties);
+
+  if (!result.success) {
+    console.error('Event validation failed for ' + event + ':', result.error);
+    return Promise.resolve({
+      success: false,
+      error: result.error.message
+    });
+  }
+
+  // Import at runtime to avoid circular dependencies
+  return import('../lib/analytics').then(({ track }) =>
+    track(event, properties)
+  );
+}
+`;
+}
+
+function generateSchemaFile(schema: Schema): string {
+  const eventSchemas = Object.entries(schema.events)
+    .map(([eventName, eventDef]) => generateEventSchema(eventName, eventDef))
+    .join(',\n\n');
+
+  const typeHelpers = generateTypeHelpers(schema);
+
+  return `// Generated by scripts/gen-schema.ts - DO NOT EDIT MANUALLY
+import { z } from 'zod';
+
+// Event validation schemas
+export const eventSchemas = {
+${eventSchemas}
+} as const;
+
+// Re-export for convenience
+export { z };
+
+${typeHelpers}
+
+// Schema metadata
+export const schemaMetadata = ${JSON.stringify({
+  version: schema.version,
+  project: schema.project,
+  generatedAt: new Date().toISOString(),
+}, null, 2)};
+
+// Validation helper
+export function validateEvent(eventName: string, properties: any) {
+  const schema = eventSchemas[eventName as keyof typeof eventSchemas];
+  if (!schema) {
+    throw new Error('Unknown event: ' + eventName);
+  }
+
+  return schema.parse(properties);
+}
+
+// List all available events
+export const availableEvents = Object.keys(eventSchemas) as EventName[];
+`;
+}
+
+// Main execution
+function main() {
+  try {
+    const schemaPath = path.join(process.cwd(), 'insight.yml');
+    const outputPath = path.join(process.cwd(), 'src/lib/event-schemas.ts');
+
+    console.log('🔧 Generating event schemas from insight.yml...');
+
+    const yamlContent = readFileSync(schemaPath, 'utf8');
+    const schema = load(yamlContent) as Schema;
+
+    const generatedCode = generateSchemaFile(schema);
+    writeFileSync(outputPath, generatedCode);
+
+    console.log('✅ Generated src/lib/event-schemas.ts');
+    console.log(`📊 Found ${Object.keys(schema.events).length} events:`);
+
+    Object.keys(schema.events).forEach(event => {
+      console.log(`   • ${event}`);
+    });
+
+  } catch (error) {
+    console.error('❌ Schema generation failed:', error);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  main();
+}
