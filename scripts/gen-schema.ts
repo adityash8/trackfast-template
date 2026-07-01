@@ -8,7 +8,7 @@ interface PropertyDef {
   required: boolean;
   description?: string;
   enum?: string[];
-  default?: any;
+  default?: unknown;
 }
 
 interface EventDef {
@@ -25,9 +25,9 @@ interface Schema {
   };
   events: Record<string, EventDef>;
   analytics?: {
-    providers: Record<string, any>;
+    providers: Record<string, unknown>;
   };
-  dashboards?: Record<string, any>;
+  dashboards?: Record<string, unknown>;
 }
 
 function generateZodType(prop: PropertyDef): string {

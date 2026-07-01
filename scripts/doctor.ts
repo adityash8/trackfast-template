@@ -7,12 +7,12 @@ interface DoctorResult {
   test: string;
   status: 'pass' | 'fail' | 'warn';
   message: string;
-  details?: any;
+  details?: unknown;
 }
 
 interface TestEvent {
   name: string;
-  properties: Record<string, any>;
+  properties: Record<string, unknown>;
   description: string;
 }
 
@@ -34,7 +34,7 @@ class TrackfastDoctor {
     console.log(colors[type](message));
   }
 
-  private addResult(test: string, status: 'pass' | 'fail' | 'warn', message: string, details?: any) {
+  private addResult(test: string, status: 'pass' | 'fail' | 'warn', message: string, details?: unknown) {
     this.results.push({ test, status, message, details });
   }
 
@@ -223,7 +223,7 @@ class TrackfastDoctor {
       const page = await browser.newPage();
 
       // Set up network monitoring
-      const requests: any[] = [];
+      const requests: Array<{ url: string; method: string; postData: string | undefined }> = [];
       page.on('request', request => {
         if (request.url().includes('/api/track') || request.url().includes('posthog.com')) {
           requests.push({
