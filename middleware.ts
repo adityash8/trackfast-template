@@ -17,7 +17,7 @@ async function validateTrackingRequest(request: NextRequest) {
 
     try {
       payload = JSON.parse(body);
-    } catch (parseError) {
+    } catch {
       return NextResponse.json(
         {
           error: 'Invalid JSON payload',
@@ -56,11 +56,11 @@ async function validateTrackingRequest(request: NextRequest) {
     // Validate event properties against schema
     try {
       validateEvent(payload.event, payload.properties || {});
-    } catch (validationError: any) {
+    } catch (validationError) {
       return NextResponse.json(
         {
           error: 'Event validation failed',
-          details: validationError.message,
+          details: validationError instanceof Error ? validationError.message : String(validationError),
           event: payload.event,
           properties: payload.properties
         },
